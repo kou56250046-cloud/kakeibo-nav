@@ -34,23 +34,17 @@ export default function SettingsPage() {
   useEffect(() => { load() }, [load])
 
   const handleCreateFamily = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data: fam } = await supabase.from('families').insert({ name: `${profile?.display_name}の家族` }).select().single()
-    if (fam) {
-      await supabase.from('profiles').update({ family_id: fam.id }).eq('id', user.id)
-      setMsg('家族グループを作成しました！招待コードを共有してください。')
-      load()
-    }
+    const name = `${profile?.display_name ?? 'My'}の家族`
+    const { data, error } = await supabase.rpc('create_family', { family_name: name })
+    if (error) { setMsg(`エラー: ${error.message}`); return }
+    setMsg('家族グループを作成しました！招待コードを共有してください。')
+    load()
   }
 
   const handleJoinFamily = async () => {
     if (!joinCode.trim()) return
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data: fam } = await supabase.from('families').select('*').eq('invite_code', joinCode.trim()).single()
-    if (!fam) { setMsg('招待コードが見つかりません'); return }
-    await supabase.from('profiles').update({ family_id: fam.id }).eq('id', user.id)
+    const { data, error } = await supabase.rpc('join_family', { code: joinCode.trim() })
+    if (error) { setMsg('招待コードが見つかりません'); return }
     setMsg('家族グループに参加しました！')
     load()
   }

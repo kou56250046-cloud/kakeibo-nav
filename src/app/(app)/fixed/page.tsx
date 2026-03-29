@@ -30,30 +30,29 @@ export default function FixedPage() {
       supabase.from('fixed_expenses').select('*').eq('family_id', fid).eq('is_active', true).order('category'),
       supabase.from('monthly_fixed_records').select('*, fixed_expenses(*)').eq('family_id', fid).eq('year_month', ym),
     ])
-    setFixedExpenses(fixed ?? [])
-    setMonthlyRecords(monthly ?? [])
+    const expenses = fixed ?? []
+    const records = monthly ?? []
+    setFixedExpenses(expenses)
+    setMonthlyRecords(records)
     setLoading(false)
-  }, [supabase])
 
-  const ensureMonthlyRecords = useCallback(async (fid: string, ym: string, expenses: FixedExpense[]) => {
-    const existingIds = new Set((await supabase.from('monthly_fixed_records').select('fixed_expense_id').eq('family_id', fid).eq('year_month', ym)).data?.map(r => r.fixed_expense_id))
-    const missing = expenses.filter(e => !existingIds.has(e.id))
-    if (missing.length > 0) {
-      await supabase.from('monthly_fixed_records').insert(missing.map(e => ({
-        family_id: fid, fixed_expense_id: e.id, year_month: ym, amount: e.amount
-      })))
+    // 固定費はあるが今月の記録がない場合に自動生成
+    if (expenses.length > 0) {
+      const existingIds = new Set(records.map((r: MonthlyFixedRecord) => r.fixed_expense_id))
+      const missing = expenses.filter((e: FixedExpense) => !existingIds.has(e.id))
+      if (missing.length > 0) {
+        const { data: newRecords } = await supabase.from('monthly_fixed_records').insert(
+          missing.map((e: FixedExpense) => ({ family_id: fid, fixed_expense_id: e.id, year_month: ym, amount: e.amount }))
+        ).select('*, fixed_expenses(*)')
+        if (newRecords) setMonthlyRecords(prev => [...prev, ...newRecords])
+      }
     }
   }, [supabase])
 
   useEffect(() => { init() }, [init])
   useEffect(() => {
-    if (familyId) {
-      setLoading(true)
-      loadData(familyId, yearMonth).then(() => {
-        if (fixedExpenses.length > 0) ensureMonthlyRecords(familyId, yearMonth, fixedExpenses)
-      })
-    }
-  }, [familyId, yearMonth])
+    if (familyId) { setLoading(true); loadData(familyId, yearMonth) }
+  }, [familyId, yearMonth, loadData])
 
   const handleAddFixed = async () => {
     if (!familyId || !form.name || !form.amount) return
